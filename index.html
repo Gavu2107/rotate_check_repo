@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Video Player with Debug Logs</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .upload-section {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .upload-btn {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+
+        .upload-btn:hover {
+            background: #45a049;
+        }
+
+        .video-container {
+            position: relative;
+            max-width: 800px;
+            width: 100%;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        #videoPlayer {
+            width: 100%;
+            height: 450px;
+            object-fit: contain;
+            background: #000;
+            display: block;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+            padding: 20px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .video-container:hover .controls,
+        .controls.visible {
+            opacity: 1;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 3px;
+            margin-bottom: 15px;
+            cursor: pointer;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: #4CAF50;
+            width: 0%;
+            border-radius: 3px;
+            transition: width 0.1s;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: rgba(255,255,255,0.4);
+            transform: scale(1.1);
+        }
+
+        .play-pause-btn {
+            background: rgba(76,175,80,0.8);
+            font-size: 20px;
+        }
+
+        .play-pause-btn:hover {
+            background: rgba(76,175,80,1);
+        }
+
+        .time-display {
+            font-size: 14px;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        .fullscreen-hint {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: none;
+        }
+
+        /* Debug Panel */
+        .debug-panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.9);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+            max-width: 350px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 12px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .debug-panel.show {
+            display: block;
+        }
+
+        .debug-line {
+            padding: 2px 0;
+            border-bottom: 1px solid #333;
+            word-break: break-word;
+        }
+
+        .debug-success {
+            color: #4CAF50;
+        }
+
+        .debug-error {
+            color: #f44336;
+        }
+
+        .debug-info {
+            color: #2196F3;
+        }
+
+        .debug-warn {
+            color: #FF9800;
+        }
+
+        .toggle-debug {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #FF5722;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            z-index: 1001;
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            #videoPlayer {
+                height: calc(100vw * 9 / 16);
+                max-height: 60vh;
+            }
+            
+            .fullscreen-hint {
+                display: block;
+            }
+        }
+
+        .no-video {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 450px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <button class="toggle-debug" id="toggleDebug">🔧 Debug</button>
+    
+    <div class="debug-panel" id="debugPanel"></div>
+
+    <div class="upload-section">
+        <h2>Custom Video Player</h2>
+        <label for="fileInput" class="upload-btn">📁 Upload Video</label>
+        <input type="file" id="fileInput" accept="video/*" />
+    </div>
+
+    <div class="video-container" id="videoContainer">
+        <video id="videoPlayer" controlsList="nodownload" preload="metadata">
+            Your browser does not support the video tag.
+        </video>
+        
+        <div class="fullscreen-hint">👆 Tap fullscreen to rotate on mobile</div>
+        
+        <div class="controls" id="controls">
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="control-buttons">
+                <button class="btn play-pause-btn" id="playPauseBtn">▶️</button>
+                <div class="time-display" id="timeDisplay">00:00 / 00:00</div>
+                <button class="btn" id="fullscreenBtn" title="Fullscreen">⛶</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class CustomVideoPlayer {
+            constructor() {
+                this.video = document.getElementById('videoPlayer');
+                this.fileInput = document.getElementById('fileInput');
+                this.playPauseBtn = document.getElementById('playPauseBtn');
+                this.progressContainer = document.getElementById('progressContainer');
+                this.progressBar = document.getElementById('progressBar');
+                this.timeDisplay = document.getElementById('timeDisplay');
+                this.fullscreenBtn = document.getElementById('fullscreenBtn');
+                this.controls = document.getElementById('controls');
+                this.videoContainer = document.getElementById('videoContainer');
+                this.debugPanel = document.getElementById('debugPanel');
+                this.toggleDebug = document.getElementById('toggleDebug');
+                
+                this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                this.originalOrientation = screen.orientation ? screen.orientation.type : 'unknown';
+                
+                this.init();
+            }
+
+            log(type, message, data = null) {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.className = `debug-line debug-${type}`;
+                logEntry.innerHTML = `<strong>[${timestamp}]</strong> ${message}${data ? `<br><small>${JSON.stringify(data, null, 2)}</small>` : ''}`;
+                this.debugPanel.appendChild(logEntry);
+                this.debugPanel.scrollTop = this.debugPanel.scrollHeight;
+                
+                console.log(`[VIDEO] ${message}`, data || '');
+            }
+
+            clearLogs() {
+                this.debugPanel.innerHTML = '';
+                this.log('info', '🧹 Debug logs cleared');
+            }
+
+            init() {
+                this.log('info', '🚀 Player initialized');
+                this.log('info', `📱 Mobile detected: ${this.isMobile}`);
+                this.log('info', `🌐 Screen API available: ${!!screen.orientation}`);
+                this.log('info', `🎥 Video element ready`);
+                
+                this.bindEvents();
+                this.updateControls();
+            }
+
+            bindEvents() {
+                // Debug toggle
+                this.toggleDebug.addEventListener('click', () => {
+                    this.debugPanel.classList.toggle('show');
+                    if (this.debugPanel.classList.contains('show')) {
+                        this.log('info', '🔍 Debug panel opened');
+                    }
+                });
+
+                // Clear logs on double-click debug button
+                this.toggleDebug.addEventListener('dblclick', () => this.clearLogs());
+
+                // File upload
+                this.fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+                
+                // Play/Pause
+                this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
+                this.video.addEventListener('click', () => {
+                    if (!this.isMobile) this.togglePlayPause();
+                });
+                
+                // Progress
+                this.progressContainer.addEventListener('click', (e) => this.seek(e));
+                this.video.addEventListener('timeupdate', () => this.updateProgress());
+                this.video.addEventListener('loadedmetadata', () => this.updateProgress());
+                
+                // Fullscreen events with detailed logging
+                this.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+                this.video.addEventListener('dblclick', () => this.toggleFullscreen());
+                
+                // Multiple fullscreen change events for comprehensive logging
+                this.video.addEventListener('fullscreenchange', () => this.onFullscreenChange());
+                this.video.addEventListener('webkitfullscreenchange', () => this.onFullscreenChange());
+                this.videoContainer.addEventListener('fullscreenchange', () => this.onFullscreenChange());
+                this.videoContainer.addEventListener('webkitfullscreenchange', () => this.onFullscreenChange());
+                
+                // Mobile orientation events
+                if (this.isMobile && screen.orientation) {
+                    screen.orientation.addEventListener('change', () => this.onOrientationChange());
+                    this.log('success', '📱 Screen orientation listener attached');
+                } else {
+                    this.log('warn', '⚠️ Screen orientation API unavailable or not mobile');
+                }
+                
+                // Controls visibility
+                this.videoContainer.addEventListener('mousemove', () => this.showControls());
+                this.videoContainer.addEventListener('mouseleave', () => this.hideControls());
+                
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => this.handleKeyboard(e));
+            }
+
+            handleFileUpload(e) {
+                const file = e.target.files[0];
+                if (file && file.type.startsWith('video/')) {
+                    this.log('success', '📤 Video file selected', {
+                        name: file.name,
+                        size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+                        type: file.type
+                    });
+                    const url = URL.createObjectURL(file);
+                    this.video.src = url;
+                    this.video.load();
+                    this.videoContainer.classList.remove('no-video');
+                } else {
+                    this.log('error', '❌ Invalid file type');
+                }
+            }
+
+            togglePlayPause() {
+                if (this.video.paused) {
+                    this.video.play();
+                    this.playPauseBtn.textContent = '⏸️';
+                    this.log('info', '▶️ Playing');
+                } else {
+                    this.video.pause();
+                    this.playPauseBtn.textContent = '▶️';
+                    this.log('info', '⏸️ Paused');
+                }
+            }
+
+            toggleFullscreen() {
+                this.log('info', '🔄 Fullscreen toggle requested');
+                
+                const isFullscreen = !!(
+                    document.fullscreenElement ||
+                    document.webkitFullscreenElement ||
+                    document.mozFullScreenElement ||
+                    document.msFullscreenElement
+                );
+
+                if (!isFullscreen) {
+                    this.requestFullscreen();
+                } else {
+                    this.log('info', '📱 Exiting fullscreen');
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.mozCancelFullScreen) {
+                        document.mozCancelFullScreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                }
+            }
+
+            requestFullscreen() {
+                const elements = [this.videoContainer, this.video];
+                
+                for (let el of elements) {
+                    if (el.requestFullscreen) {
+                        el.requestFullscreen();
+                        this.log('info', '🌐 Standard fullscreen requested on', el.tagName);
+                        return;
+                    } else if (el.webkitRequestFullscreen) {
+                        el.webkitRequestFullscreen();
+                        this.log('info', '🍎 WebKit fullscreen requested on', el.tagName);
+                        return;
+                    } else if (el.mozRequestFullScreen) {
+                        el.mozRequestFullScreen();
+                        this.log('info', '🦊 Mozilla fullscreen requested on', el.tagName);
+                        return;
+                    } else if (el.msRequestFullscreen) {
+                        el.msRequestFullscreen();
+                        this.log('info', '🪟 MS fullscreen requested on', el.tagName);
+                        return;
+                    }
+                }
+                this.log('error', '❌ No fullscreen API available');
+            }
+
+            onFullscreenChange() {
+                const isFullscreen = !!(
+                    document.fullscreenElement ||
+                    document.webkitFullscreenElement ||
+                    document.mozFullScreenElement ||
+                    document.msFullscreenElement
+                );
+                
+                this.log('info', `🎬 Fullscreen state: ${isFullscreen ? 'ENTERED' : 'EXITED'}`, {
+                    fullscreenElement: document.fullscreenElement?.tagName || 'none',
+                    webkitFullscreen: document.webkitFullscreenElement?.tagName || 'none'
+                });
+
+                if (this.isMobile && isFullscreen) {
+                    this.attemptOrientationLock();
+                }
+            }
+
+            attemptOrientationLock() {
+                this.log('warn', '🔄 Attempting orientation lock...');
+                
+                if (!screen.orientation || !screen.orientation.lock) {
+                    this.log('error', '❌ screen.orientation.lock() NOT AVAILABLE');
+                    this.log('warn', '💡 Common on iOS Safari - manual rotation needed');
+                    return;
+                }
+
+                const lockPromises = [
+                    screen.orientation.lock('landscape').catch(e => {
+                        this.log('error', '❌ landscape lock failed', e.message);
+                    }),
+                    screen.orientation.lock('landscape-primary').catch(e => {
+                        this.log('error', '❌ landscape-primary lock failed', e.message);
+                    }),
+                    screen.orientation.lock('landscape-secondary').catch(e => {
+                        this.log('error', '❌ landscape-secondary lock failed', e.message);
+                    })
+                ];
+
+                Promise.any(lockPromises).then(() => {
+                    this.log('success', '✅ Orientation locked to landscape!');
+                }).catch(() => {
+                    this.log('error', '❌ All orientation lock attempts failed');
+                });
+            }
+
+            onOrientationChange() {
+                this.log('success', '🔄 Orientation changed!', {
+                    newType: screen.orientation.type,
+                    angle: screen.orientation.angle
+                });
+            }
+
+            seek(e) {
+                const rect = this.progressContainer.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                this.video.currentTime = percent * this.video.duration;
+            }
+
+            updateProgress() {
+                if (this.video.duration) {
+                    const percent = (this.video.currentTime / this.video.duration) * 100;
+                    this.progressBar.style.width = percent + '%';
+                    this.timeDisplay.textContent = this.formatTime(this.video.currentTime) + 
+                                                 ' / ' + this.formatTime(this.video.duration);
+                }
+            }
+
+            formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            showControls() {
+                this.controls.classList.add('visible');
+            }
+
+            hideControls() {
+                this.controls.classList.remove('visible');
+            }
+
+            updateControls() {
+                this.video.addEventListener('play', () => {
+                    this.playPauseBtn.textContent = '⏸️';
+                });
+                this.video.addEventListener('pause', () => {
+                    this.playPauseBtn.textContent = '▶️';
+                });
+                this.video.addEventListener('ended', () => {
+                    this.playPauseBtn.textContent = '▶️';
+                    this.progressBar.style.width = '0%';
+                });
+            }
+
+            handleKeyboard(e) {
+                if (e.target.tagName === 'INPUT') return;
+                
+                switch(e.code) {
+                    case 'Space':
+                        e.preventDefault();
+                        this.togglePlayPause();
+                        break;
+                    case 'ArrowRight':
+                        this.video.currentTime += 10;
+                        break;
+                    case 'ArrowLeft':
+                        this.video.currentTime -= 10;
+                        break;
+                    case 'KeyF':
+                        this.toggleFullscreen();
+                        break;
+                    case 'KeyD':
+                        this.debugPanel.classList.toggle('show');
+                        break;
+                }
+            }
+        }
+
+        // Initialize player when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new CustomVideoPlayer();
+        });
+    </script>
+</body>
+</html>
